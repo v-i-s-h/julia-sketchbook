@@ -57,7 +57,7 @@ function kalman_filter()
     Pp = similar(Pu)
 end
 
-@timeit "Simulation" begin
+@timeit "simulation" begin
     # Simulation
     result = Vector{Float64}(undef, 60000)
 
@@ -66,45 +66,20 @@ end
     # auxilary variables
     K = zeros(18, 6)
     aux1 = zeros(18, 18)
-    aux2 = zeros(18, 18)
-    aux3 = zeros(18, 6)
-    aux4 = zeros(6, 6)
-    aux5 = zeros(18, 18)
-    aux6 = zeros(18, 18)
-    aux41 = zeros(6, 6)
-    aux42 = zeros(6, 6)
-    
 @timeit "loop" begin
     @inbounds for k = 2:60000
-        # Pp .= Fk_1 * Pu * Fk_1' .+ Q
-        @timeit "Pp" begin
-            mul!(aux2, mul!(aux1, Fk_1, Pu), Fk_1')
-            @. Pp = aux2 + Q
-        end
-
-        # K .= Pp * Hk' * pinv(R .+ Hk * Pp * Hk')
-        @timeit "K" begin
-            mul!(aux4, Hk, mul!(aux3, Pp, Hk'))
-            @. aux41 = R + aux4
-            @timeit "K-pinv" begin
-                aux42 = pinv(aux41)
-            end
-            mul!(K, aux3, aux42)
-        end
-
-        # Pu = (I - K * Hk) * Pp * (I - K * Hk)' + K * R * K'
+        @timeit "Pp" Pp .= Fk_1 * Pu * Fk_1' .+ Q
+        @timeit "K" K .= Pp * Hk' * pinv(R .+ Hk * Pp * Hk')
         @timeit "Pu" begin
-            mul!(aux1, K, Hk)
-            @. aux2 = I18 - aux1
-            mul!(aux6, mul!(aux5, aux2, Pp), aux2')
-            mul!(aux5, mul!(aux3, K, R), K')
-            @. Pu = aux5 + aux6
+        aux1 = I18 .- K * Hk
+        Pu = aux1 * Pp * aux1' .+ K * R * K'
         end
 
         result[k] = tr(Pu)
     end
 end
-end    
+end
+
     return result
 end
 
@@ -113,6 +88,7 @@ end
     using BenchmarkTools
     @btime kalman_filter();
 =#
+
 reset_timer!()
 @timeit "Main" begin
     r = kalman_filter();
@@ -120,7 +96,3 @@ end
 @show r[end];
 print_timer()
 println()
-
-# using BenchmarkTools
-# display(@benchmark kalman_filter())
-# println()

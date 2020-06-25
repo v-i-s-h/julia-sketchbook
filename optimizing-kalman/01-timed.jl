@@ -13,6 +13,8 @@ const O3x12 = zeros(3, 12)
 const O12x18    = zeros(12, 18)
 
 function kalman_filter()
+
+@timeit "Initialization" begin
     # Constants
     λ = 1/100
     Q = 1e-20I
@@ -53,13 +55,15 @@ function kalman_filter()
 
     # Kalman filter initialization
     Pu = Matrix{Float64}(I, 18, 18)
+end
 
     # Simulation
+@timeit "Simulation" begin
     result = Vector{Float64}(undef, 60000)
 
     result[1] = tr(Pu)
 
-    reset_timer!()
+@timeit "loop" begin
     @inbounds for k = 2:60000
         @timeit "Pp" Pp = Fk_1 * Pu * Fk_1' + Q
         @timeit "K" K = Pp * Hk' * pinv(R + Hk * Pp * Hk')
@@ -67,8 +71,8 @@ function kalman_filter()
 
         result[k] = tr(Pu)
     end
-    print_timer()
-
+end
+end
     return result
 end
 
@@ -78,6 +82,10 @@ end
     @btime r = kalman_filter();
 =#
 
-r = kalman_filter();
+reset_timer!()
+@timeit "Main" begin
+    r = kalman_filter();
+end
 @show r[end];
+print_timer()
 println()

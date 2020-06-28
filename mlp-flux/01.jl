@@ -17,7 +17,7 @@ end
 @with_kw mutable struct Args
     η::Float64 = 3e-4
     batchsize::Int = 1024
-    epochs::Int = 10
+    epochs::Int = 5
     device::Function = gpu  # Set as gpu is gpu is available
 end
 
@@ -66,7 +66,7 @@ function accuracy(dataloader, model)
 end
 
 function train(; kws...)
-    # Intiialize model parameters
+    # Initialize model parameters
     args = Args(;kws...)
 
     # Load data
@@ -82,7 +82,12 @@ function train(; kws...)
     # Training
     evalcb = () -> @show(loss_all(train_data, m))
     opt = ADAM(args.η)
-    @epochs args.epochs Flux.train!(loss, params(m), train_data, opt, cb=evalcb)
+    for i in 1:args.epochs
+        Flux.train!(loss, params(m), train_data, opt)
+        l = loss_all(train_data, m)
+        println("Epoch = ", i, "    l = ", l)
+    end
+    # @epochs args.epochs Flux.train!(loss, params(m), train_data, opt, cb=evalcb)
 
     # Evaluation
     @show accuracy(train_data, m)

@@ -25,3 +25,6 @@ docs/site/
 
 # Notebooks
 .ipynb_checkpoints
+
+# model output
+zoo

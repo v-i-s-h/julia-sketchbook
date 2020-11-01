@@ -28,3 +28,6 @@ docs/site/
 
 # model output
 zoo
+
+# 
+*.csv

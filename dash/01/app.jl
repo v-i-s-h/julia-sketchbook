@@ -1,3 +1,7 @@
+#=
+    Dash for Julia - Tutorial 1
+    Source: https://dash-julia.plotly.com/getting-started
+=#
 using Dash, DashHtmlComponents, DashCoreComponents
 
 app = dash()

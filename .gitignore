@@ -31,3 +31,6 @@ zoo
 
 # 
 *.csv
+
+# VS Code
+.vscode

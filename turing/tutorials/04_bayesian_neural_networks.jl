@@ -1,5 +1,5 @@
 # Bayesian Neural Networks
-# Source: https://turing.ml/dev/tutorials/02-logistic-regression/
+# Source: https://turing.ml/dev/tutorials/03-bayesian-neural-network/
 
 using Turing, Flux, Plots, Random, ReverseDiff
 
@@ -136,22 +136,22 @@ anim = @gif for i ∈ 1:n_end
     contour!(x_range, y_range, Z, title="Iteration $i", clim=(0, 1))
 end every 5
 
-## Variational Inference
+# ## Variational Inference
 
-using Bijectors
-using Turing: Variational
-using AdvancedVI
+# using Bijectors
+# using Turing: Variational
+# using AdvancedVI
 
-m = bayes_nn(hcat(xs...), ts);
+# m = bayes_nn(hcat(xs...), ts);
 
-q = Variational.meanfield(m)
+# q = Variational.meanfield(m)
 
-μ = randn(length(q))
-ω = -1 .* ones(length(q))
+# μ = randn(length(q))
+# ω = -1 .* ones(length(q))
 
-q = AdvancedVI.update(q, μ, exp.(ω))
+# q = AdvancedVI.update(q, μ, exp.(ω))
 
-advi = ADVI(10, 5_000)
-q_hat = vi(m, advi, q)
+# advi = ADVI(10, 5_000)
+# q_hat = vi(m, advi, q)
 
 ##

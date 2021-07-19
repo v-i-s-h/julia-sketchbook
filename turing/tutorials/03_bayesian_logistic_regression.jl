@@ -1,5 +1,3 @@
-# using Base: Float16, Float64
-# using DataFrames: Matrix
 # Bayesian Logistic Regression
 # Source: https://turing.ml/dev/tutorials/02-logistic-regression/
 

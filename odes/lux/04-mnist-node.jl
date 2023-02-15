@@ -1,0 +1,162 @@
+# Neural ODE
+
+using Lux
+using ComponentArrays,
+    DiffEqSensitivity,
+    NNlib,
+    Optimisers,
+    OrdinaryDiffEq,
+    Random,
+    Statistics,
+    Zygote,
+    OneHotArrays
+import MLDatasets: MNIST
+import MLUtils: DataLoader, splitobs
+using CUDA
+
+## Loading MNIST
+function loadmnist(batchsize, train_split)
+    N = 1500
+    dataset = MNIST(; split=:train)
+    imgs = dataset.features[:, :, 1:N]
+    labels_raw = dataset.targets[1:N]
+
+    # Process to (H, W, C, B)
+    x_data =
+        Float32.(reshape(imgs, size(imgs, 1), size(imgs, 2), 1, size(imgs, 3)))
+    y_data = onehotbatch(labels_raw, 0:9)
+    (x_train, y_train), (x_test, y_test) = splitobs(
+        (x_data, y_data); at=train_split, shuffle=true
+    )
+
+    return (
+        DataLoader(
+            collect.((x_train, y_train)); batchsize=batchsize, shuffle=true
+        ),
+        DataLoader(
+            collect.((x_test, y_test)); batchsize=batchsize, shuffle=false
+        ),
+    )
+end
+
+## Neural ODE layer
+struct NeuralODE{M<:Lux.AbstractExplicitLayer,So,Se,T,K} <:
+       Lux.AbstractExplicitContainerLayer{(:model,)}
+    model::M
+    solver::So
+    sensealg::Se
+    tspan::T
+    kwargs::K
+end
+
+function NeuralODE(
+    model::Lux.AbstractExplicitLayer;
+    solver=Tsit5(),
+    sensealg=InterpolatingAdjoint(; autojacvec=ZygoteVJP()),
+    tspan=(0.0f0, 1.0f0),
+    kwargs...
+)
+    return NeuralODE(model, solver, sensealg, tspan, kwargs)
+end
+
+function (n::NeuralODE)(x, ps, st)
+    function dudt(u, p, t)
+        u_, st = n.model(u, p, st)
+        return u_
+    end
+    prob = ODEProblem{false}(ODEFunction{false}(dudt), x, n.tspan, ps)
+    return solve(prob, n.solver; sensealg=n.sensealg, n.kwargs...), st
+end
+
+function diffeqsol_to_array(x::ODESolution{T,N,<:AbstractVector{<:CuArray}}) where {T,N}
+    return dropdims(x; dims=3)
+end
+
+function diffeqsol_to_array(x::ODESolution)
+    return dropdims(Array(x); dims=3)
+end
+
+##
+function create_model()
+    model = Chain(
+        FlattenLayer(),
+        Dense(784, 20, tanh),
+        NeuralODE(
+            Chain(
+                Dense(20, 10, tanh), Dense(10, 10, tanh), Dense(10, 20, tanh)
+            );
+            save_everystep=false,
+            reltol=1.0f-3,
+            abstol=1.0f-3,
+            save_start=false,
+        ),
+        diffeqsol_to_array,
+        Dense(20, 10),
+    )
+    rng = Random.default_rng()
+    Random.seed!(rng, 0)
+
+    ps, st = Lux.setup(rng, model)
+    ps = ComponentArray(ps)
+
+    return model, ps, st
+end
+
+##
+logitcrossentropy(y_pred, y) = mean(-sum(y .* logsoftmax(y_pred); dims=1))
+
+function loss(x, y, model, ps, st)
+    y_pred, st = model(x, ps, st)
+    return logitcrossentropy(y_pred, y), st
+end
+
+function accuracy(model, ps, st, dataloader)
+    total_correct, total = 0, 0
+    st = Lux.testmode(st)
+    for (x, y) in dataloader
+        target_class = onecold(y)
+        predicted_class = onecold(model(x, ps, st)[1])
+        total_correct += sum(target_class .== predicted_class)
+        total += length(target_class)
+    end
+
+    return total_correct / total
+end
+
+##
+function train()
+    model, ps, st = create_model()
+
+    train_dataloader, val_dataloader = loadmnist(128, 0.90)
+
+    opt = Optimisers.Adam(0.001f0)
+    st_opt = Optimisers.setup(opt, ps)
+
+    # Warm up model
+    img, lab = train_dataloader.data[1][:, :, :, 1:1],
+    train_dataloader.data[2][:, 1:1]
+    loss(img, lab, model, ps, st)
+    (l, _), back = pullback(p -> loss(img, lab, model, p, st), ps)
+    back((one(l), nothing))
+
+    # Train the model
+    nepochs = 9
+    for epoch in 1:nepochs
+        stime = time()
+        for (x, y) in train_dataloader
+            (l, st), back = pullback(p -> loss(x, y, model, p, st), ps)
+            gs = back((one(l), nothing))[1]
+            st_opt, ps = Optimisers.update(st_opt, ps, gs)
+        end
+        ttime = time() - stime
+        println(
+            "[$epoch/$nepochs]    ",
+            "Time: $(round(ttime; digits=2))s    ",
+            "Training Accuracy : $(round(accuracy(model, ps, st, train_dataloader) * 100; digits=2))%   ",
+            "Test Accuracy: $(round(accuracy(model, ps, st, val_dataloader) * 100; digits=2))%",
+        )
+    end
+end
+
+##
+train()

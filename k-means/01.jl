@@ -14,7 +14,7 @@ using LinearAlgebra
 ## Generate data
 function generate_data(;k=4, nk=25)
     l = 5.0 # Limits
-    d = 2 # dimension
+    d = 10 # dimension
 
     # Cluster centers
     μ = l .* randn(d, k)
@@ -88,5 +88,5 @@ ss_lower_bound = tr_H .- cumsum(λₕ[1:n_centers[end]]) # Compute for given
 fig = plot(size=(720, 360))
 plot!(n_centers, ss_mean, label=nothing)
 plot!(n_centers, ss_lower_bound, label="zha2001spectral")
-yaxis!(:log)
+# yaxis!(:log)
 xaxis!("k")
